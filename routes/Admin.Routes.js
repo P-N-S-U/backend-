@@ -3,6 +3,11 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const Admin = require("../models/Admin.model");
 const Farmer = require("../models/Farmers.model");
+const QRCode = require("qrcode");
+const generateCertificate = require("../utils/generateCertificate");
+const fs = require("fs");
+const path = require("path");
+
 const {protect,adminOnly} = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -51,23 +56,77 @@ router.post("/login", async (req, res) => {
 
 router.post("/approve/:id", protect, adminOnly, async (req, res) => {
   try {
-    // Ensure only the hardcoded admin can access this route
+    // Restrict access to only the hardcoded admin
     if (req.user.email !== "admin@naturalfarm.com") {
       return res.status(403).json({ message: "Unauthorized access" });
     }
 
+    // Find the farmer
     const farmer = await Farmer.findById(req.params.id);
     if (!farmer) {
       return res.status(404).json({ message: "Farmer not found" });
     }
 
+    console.log("🔹 Farmer Found:", farmer);
+
+    // Generate Certification PDF
+    const certificateURL = await generateCertificate(farmer);
+    console.log("📄 Certificate Generated:", certificateURL);
+
+    // Generate QR Code linking to certification
+    const qrCodeData = `https://yourwebsite.com${certificateURL}`;
+    const qrCodePath = path.join(__dirname, `../qrcodes/${farmer._id}.png`);
+    await QRCode.toFile(qrCodePath, qrCodeData);
+    console.log("🔗 QR Code Generated:", qrCodePath);
+
+    // Update farmer's profile
     farmer.verified = true;
+    farmer.certificateURL = certificateURL;
+    farmer.qrCodeURL = `/qrcodes/${farmer._id}.png`;
     await farmer.save();
 
-    res.json({ message: "Farmer approved successfully" });
+    console.log("✅ Farmer Approved:", farmer);
+    res.json({ message: "Farmer approved & certification issued", farmer });
   } catch (err) {
-    res.status(500).json({ message: "Server Error" });
+    console.error("🔥 Error Approving Farmer:", err);
+    res.status(500).json({ message: "Server Error", error: err.message });
   }
 });
 
 module.exports = router;
+
+
+
+// import { useEffect, useState } from "react";
+// import { useParams } from "react-router-dom";
+// import axios from "axios";
+
+// const FarmerProfile = () => {
+//   const { farmerId } = useParams();
+//   const [farmer, setFarmer] = useState(null);
+
+//   useEffect(() => {
+//     axios.get(`http://localhost:5000/api/farmers/verify/${farmerId}`)
+//       .then(response => setFarmer(response.data))
+//       .catch(error => console.error("Error fetching farmer details", error));
+//   }, [farmerId]);
+
+//   if (!farmer) return <p>Loading...</p>;
+
+//   return (
+//     <div>
+//       <h2>{farmer.name}'s Certification</h2>
+//       {farmer.verified ? (
+//         <>
+//           <p>Status: ✅ Verified</p>
+//           <a href={farmer.certificateURL} target="_blank" rel="noopener noreferrer">Download Certificate</a>
+//           <img src={farmer.qrCodeURL} alt="QR Code for verification" />
+//         </>
+//       ) : (
+//         <p>Status: ❌ Not Verified</p>
+//       )}
+//     </div>
+//   );
+// };
+
+// export default FarmerProfile;
