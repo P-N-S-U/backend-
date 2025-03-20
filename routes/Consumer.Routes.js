@@ -79,4 +79,37 @@ router.get("/profile", protect, consumerOnly, async (req, res) => {
   }
 });
 
+//----------------------CART ROUTES-----------------------
+
+/** 📌 1️⃣ Save Cart to Backend on Logout */
+router.post("/cart/save", protect, consumerOnly, async (req, res) => {
+  try {
+    const { cart } = req.body;
+    const consumer = await Consumer.findById(req.user.id);
+
+    if (!consumer) return res.status(404).json({ message: "Consumer not found" });
+
+    consumer.cart = cart;
+    await consumer.save();
+
+    res.json({ message: "Cart saved successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Server Error", error: err.message });
+  }
+});
+
+/** 📌 3️⃣ Fetch Cart */
+router.get("/cart", protect, consumerOnly, async (req, res) => {
+  try {
+    const consumer = await Consumer.findById(req.user.id).populate("cart.product");
+
+    if (!consumer) return res.status(404).json({ message: "Consumer not found" });
+
+    res.json(consumer.cart);
+  } catch (err) {
+    res.status(500).json({ message: "Server Error", error: err.message });
+  }
+});
+
+
 module.exports = router;
